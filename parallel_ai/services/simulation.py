@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 from openai import OpenAI
 
 from parallel_ai.models import SCORE_KEYS
+from parallel_ai.services.pendo import track as pendo_track
 from parallel_ai.services.prompts import SYSTEM_PROMPT, simulation_prompt
 
 
@@ -61,6 +62,14 @@ def generate_simulation(decision: str, option_a: str, option_b: str, profile: di
         try:
             return _generate_with_openai(decision, option_a, option_b, profile)
         except Exception as exc:
+            pendo_track("simulation_failed", properties={
+                "error_message": str(exc)[:200],
+                "decision_text": decision[:200],
+                "option_a": option_a[:100],
+                "option_b": option_b[:100],
+                "openai_model": MODEL,
+                "fallback_used": True,
+            })
             fallback = _generate_locally(decision, option_a, option_b, profile)
             fallback["api_warning"] = f"OpenAI generation failed, local model used: {exc}"
             return fallback

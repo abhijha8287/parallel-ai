@@ -10,6 +10,7 @@ import streamlit.components.v1 as components
 from parallel_ai.models import default_profile
 from parallel_ai.services.database import delete_decision, list_decisions, save_decision
 from parallel_ai.services.pdf_report import build_pdf_report
+from parallel_ai.services.pendo import track as pendo_track
 from parallel_ai.services.simulation import generate_simulation
 from parallel_ai.ui.charts import comparison_bar, dashboard_bar, gauge, opportunity_cost_chart, radar
 from parallel_ai.ui.styles import CSS
@@ -153,6 +154,39 @@ def simulate_button() -> None:
                 st.session_state.option_b,
                 st.session_state.profile,
             )
+        sim = st.session_state.simulation
+        profile = st.session_state.profile
+        pendo_track("simulation_generated", properties={
+            "decision_text": st.session_state.decision[:200],
+            "option_a": st.session_state.option_a[:100],
+            "option_b": st.session_state.option_b[:100],
+            "generation_source": "fallback" if sim.get("api_warning") else "openai",
+            "confidence_score": sim.get("confidence_score", 0),
+            "profile_age": profile.get("age", 0),
+            "profile_profession": str(profile.get("profession", ""))[:80],
+            "profile_risk_tolerance": str(profile.get("risk_tolerance", "")),
+            "profile_time_available": str(profile.get("time_available", "")),
+            "has_api_warning": bool(sim.get("api_warning")),
+            "futures_count": len(sim.get("futures", [])),
+        })
+        # Track profile completeness at simulation time
+        pendo_track("profile_completed", properties={
+            "fields_completed_count": sum(1 for f in [
+                profile.get("education"), profile.get("profession"),
+                profile.get("experience"), profile.get("skills"),
+                profile.get("career_goals"), profile.get("family_responsibilities"),
+            ] if f),
+            "has_education": bool(profile.get("education")),
+            "has_profession": bool(profile.get("profession")),
+            "has_experience": bool(profile.get("experience")),
+            "has_skills": bool(profile.get("skills")),
+            "has_career_goals": bool(profile.get("career_goals")),
+            "has_family_responsibilities": bool(profile.get("family_responsibilities")),
+            "monthly_income_provided": bool(profile.get("monthly_income")),
+            "savings_provided": bool(profile.get("savings")),
+            "risk_tolerance": str(profile.get("risk_tolerance", "")),
+            "time_available": str(profile.get("time_available", "")),
+        })
         st.success("Three futures generated.")
 
 
@@ -259,13 +293,20 @@ def render_timelines(sim: dict[str, Any]) -> None:
         letter = future.get("future_letter", "")
         st.text_area(f"Future letter {future.get('id')}", value=letter, height=260, label_visibility="collapsed")
         copy_button(letter, f"Copy letter {future.get('id')}")
-        st.download_button(
+        if st.download_button(
             "Download Letter",
             data=letter,
             file_name=f"future_{future.get('id', 'letter')}_letter.txt",
             mime="text/plain",
             key=f"download-letter-{future.get('id')}",
-        )
+        ):
+            pendo_track("future_letter_downloaded", properties={
+                "future_id": str(future.get("id", "")),
+                "future_name": str(future.get("name", ""))[:80],
+                "future_choice": str(future.get("choice", ""))[:100],
+                "decision_text": st.session_state.decision[:200],
+                "letter_length": len(letter),
+            })
         st.divider()
 
 
@@ -308,6 +349,13 @@ def render_debate(sim: dict[str, Any]) -> None:
         )
     challenge = st.text_input("Ask the skeptical advisor a follow-up", placeholder="What am I underestimating?")
     if challenge:
+        pendo_track("advisor_followup_asked", properties={
+            "question_text": challenge[:200],
+            "question_length": len(challenge),
+            "decision_text": st.session_state.decision[:200],
+            "option_a": st.session_state.option_a[:100],
+            "option_b": st.session_state.option_b[:100],
+        })
         st.info("Skeptical Advisor: Re-check whether your timeline, money runway, and emotional stamina all survive the same worst-case month.")
 
 
@@ -345,16 +393,35 @@ def render_report(sim: dict[str, Any]) -> None:
     with c1:
         if st.button("Save Decision", use_container_width=True):
             row_id = save_decision(st.session_state.decision, st.session_state.option_a, st.session_state.option_b, st.session_state.profile, sim, notes)
+            pendo_track("decision_saved_to_journal", properties={
+                "decision_id": row_id,
+                "decision_text": st.session_state.decision[:200],
+                "option_a": st.session_state.option_a[:100],
+                "option_b": st.session_state.option_b[:100],
+                "confidence_score": sim.get("confidence_score", 0),
+                "overall_regret_score": sim.get("regret_analysis", {}).get("overall", 0),
+                "has_notes": bool(notes),
+                "notes_length": len(notes),
+            })
             st.success(f"Saved decision #{row_id}.")
     with c2:
         pdf = build_pdf_report(st.session_state.decision, st.session_state.profile, sim)
-        st.download_button(
+        if st.download_button(
             "Download PDF Report",
             data=pdf,
             file_name="parallel_ai_decision_report.pdf",
             mime="application/pdf",
             use_container_width=True,
-        )
+        ):
+            pendo_track("pdf_report_downloaded", properties={
+                "decision_text": st.session_state.decision[:200],
+                "option_a": st.session_state.option_a[:100],
+                "option_b": st.session_state.option_b[:100],
+                "confidence_score": sim.get("confidence_score", 0),
+                "futures_count": len(sim.get("futures", [])),
+                "profile_age": st.session_state.profile.get("age", 0),
+                "profile_profession": str(st.session_state.profile.get("profession", ""))[:80],
+            })
     with st.expander("Raw structured output"):
         st.json(sim)
 
@@ -386,6 +453,14 @@ def render_history() -> None:
             st.json(selected["simulation"])
         with c2:
             if st.button("Load Into Workspace", use_container_width=True):
+                pendo_track("saved_decision_loaded", properties={
+                    "loaded_decision_id": int(selected["id"]),
+                    "decision_text": selected["decision"][:200],
+                    "option_a": selected["option_a"][:100],
+                    "option_b": selected["option_b"][:100],
+                    "original_confidence_score": selected["simulation"].get("confidence_score", 0),
+                    "original_regret_score": selected["simulation"].get("regret_analysis", {}).get("overall", 0),
+                })
                 st.session_state.decision = selected["decision"]
                 st.session_state.option_a = selected["option_a"]
                 st.session_state.option_b = selected["option_b"]
@@ -394,6 +469,10 @@ def render_history() -> None:
                 st.session_state.show_app = True
                 st.rerun()
             if st.button("Delete", use_container_width=True):
+                pendo_track("decision_deleted", properties={
+                    "deleted_decision_id": int(selected["id"]),
+                    "decision_text": selected["decision"][:200],
+                })
                 delete_decision(int(selected["id"]))
                 st.rerun()
 
