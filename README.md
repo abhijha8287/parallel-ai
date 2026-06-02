@@ -21,6 +21,40 @@ It includes future timelines, regret analysis, advisor debate, bias detection, a
 - PDF report generation with ReportLab
 - Docker-ready deployment
 
+## UI Screenshots
+
+### Landing Page
+
+![Parallel AI landing page](screenshots/parallel-ai-landing.png)
+
+### Onboarding Wizard
+
+![Parallel AI onboarding wizard](screenshots/parallel-ai-onboarding.png)
+
+### Dashboard Overview
+
+![Parallel AI dashboard overview](screenshots/parallel-ai-dashboard.png)
+
+### Parallel Universe Comparison
+
+![Parallel AI parallel universe comparison](screenshots/parallel-ai-comparison-cards.png)
+
+### Future Timelines
+
+![Parallel AI future timelines](screenshots/parallel-ai-timelines.png)
+
+### Regret Calculator
+
+![Parallel AI regret calculator](screenshots/parallel-ai-regret.png)
+
+### Reality Check Mode
+
+![Parallel AI reality check mode](screenshots/parallel-ai-reality-check.png)
+
+### Bias Detector
+
+![Parallel AI bias detector](screenshots/parallel-ai-bias.png)
+
 ## Project Structure
 
 ```text
