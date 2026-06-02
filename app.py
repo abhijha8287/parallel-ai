@@ -24,6 +24,32 @@ st.set_page_config(
 st.markdown(CSS, unsafe_allow_html=True)
 
 
+def _inject_pendo() -> None:
+    """Inject the Pendo install snippet and anonymous initialize into the parent frame."""
+    if st.session_state.get("_pendo_injected"):
+        return
+    components.html(
+        """
+        <script>
+        (function(){
+            var w = window.parent;
+            if (w.pendo) return;
+            (function(apiKey){
+                (function(p,e,n,d,o){var v,w,x,y,z;o=p[d]=p[d]||{};o._q=o._q||[];
+                v=['initialize','identify','updateOptions','pageLoad','track','trackAgent'];for(w=0,x=v.length;w<x;++w)(function(m){
+                o[m]=o[m]||function(){o._q[m===v[0]?'unshift':'push']([m].concat([].slice.call(arguments,0)));};})(v[w]);
+                y=e.createElement(n);y.async=!0;y.src='https://cdn.pendo.io/agent/static/'+apiKey+'/pendo.js';
+                z=e.getElementsByTagName(n)[0];z.parentNode.insertBefore(y,z);})(w,w.document,'script','pendo');
+            })('6fa79bc0-2e26-49f6-89da-43aa9f46dbf5');
+            w.pendo.initialize({ visitor: { id: '' } });
+        })();
+        </script>
+        """,
+        height=0,
+    )
+    st.session_state["_pendo_injected"] = True
+
+
 def init_state() -> None:
     st.session_state.setdefault("profile", default_profile())
     st.session_state.setdefault("simulation", None)
@@ -400,6 +426,7 @@ def render_history() -> None:
 
 def main() -> None:
     init_state()
+    _inject_pendo()
     sidebar()
     if not st.session_state.show_app:
         landing()
